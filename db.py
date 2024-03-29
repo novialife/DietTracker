@@ -15,9 +15,9 @@ def save_data(df, db_path, table_name):
     df.to_sql(table_name, conn, if_exists="append", index=False)
     conn.close()
 
-def delete(db_path, table_name, column_name, value):
+def delete(db_path, table_name, column_name, value, additional_condition=""):
     conn = sqlite3.connect(db_path)
-    query = f"DELETE FROM `{table_name}` WHERE `{column_name}` = '{value}'"
+    query = f"DELETE FROM `{table_name}` WHERE `{column_name}` = '{value}' {additional_condition}"
     conn.execute(query)
     conn.commit()
     conn.close()

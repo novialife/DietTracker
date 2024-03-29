@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-from db import read_data, save_data
+from db import read_data, save_data, delete
 
 st.set_page_config(layout="wide")
 
@@ -23,6 +23,7 @@ with activity_level:
             "Extra Active",
         ],
         key="activity_level",
+        index=2,
     )
     if ACTIVITY_LEVEL == "Sedentary":
         ACTIVITY_LEVEL = 1.2
@@ -89,30 +90,22 @@ def exercise_tracker(exercise_records, exercise_day):
                 "Volume": [weight_lifted * reps_done * sets_done],
             }
         )
-        save_data(new_exercise, "cut.db", exercise_day)
+        save_data(new_exercise, "tim.db", exercise_day)
         st.rerun()
 
     filtered_records = exercise_records[exercise_records["Day"] == exercise_day]
     if not filtered_records.empty:
         exercise_names = filtered_records["Exercise Name"].unique()
-        selected_exercise = st.selectbox(
-            f"Select Exercise ({exercise_day})", options=exercise_names
-        )
-        if selected_exercise:
-            specific_exercise_records = filtered_records[
-                filtered_records["Exercise Name"] == selected_exercise
-            ]
-            # Group by date and sum the volume for each day
-            specific_exercise_records = (
-                specific_exercise_records.groupby("Date").sum().reset_index()
-            )
+        # Plot all exercises grouped by the date and summed by the volume in separate graphs
+        for exercise in exercise_names:
+            exercise_data = filtered_records[filtered_records["Exercise Name"] == exercise]
+            # Group by date and sum the volume
+            exercise_data = exercise_data.groupby("Date")["Volume"].sum().reset_index()
             fig = px.line(
-                specific_exercise_records,
-                x="Date",
-                y="Volume",
-                title=f"Volume Over Time: {selected_exercise}",
+                exercise_data, x="Date", y="Volume", title=f"{exercise} Volume Over Time"
             )
-            st.plotly_chart(fig)
+            st.plotly_chart(fig, use_container_width=True)
+
 
 
 def main():
@@ -120,16 +113,14 @@ def main():
 
     # Bodyweight Tracker
     st.header("Bodyweight Tracker")
-    bodyweight_records = read_data("cut.db", "Bodyweight")[["Date", "Weight", "BMR"]]
+    bodyweight_records = read_data("tim.db", "Bodyweight")[["Date", "Weight", "BMR"]]
 
+    # Record weight section
     date = st.date_input("Date")
     weight = st.number_input("Weight (kg)", min_value=0.0)
     submit_weight = st.button("Record Weight")
 
-    if (
-        submit_weight
-        and pd.to_datetime("today").date() not in bodyweight_records["Date"].values
-    ):
+    if submit_weight and pd.to_datetime("today").date() not in bodyweight_records["Date"].values:
         new_record = pd.DataFrame(
             {
                 "Date": [date],
@@ -138,11 +129,24 @@ def main():
             }
         )
 
-        save_data(new_record, "cut.db", "Bodyweight")
+        save_data(new_record, "tim.db", "Bodyweight")
 
-    bw = read_data("cut.db", "Bodyweight")
+    # Display current records
+    bw = read_data("tim.db", "Bodyweight")
     st.dataframe(bw, use_container_width=True)
 
+    # Delete functionality
+    st.subheader("Delete a Weight Record")
+    delete_date = st.selectbox("Select a Date to Delete", options=bw["Date"].unique())
+    delete_button = st.button("Delete Record")
+
+    if delete_button:
+        # Call the delete function
+        delete("tim.db", "Bodyweight", "Date", str(delete_date))
+        st.success(f"Record for {delete_date} deleted successfully!")
+        st.rerun()
+
+    # Display graphs
     weight_graph, bmr_graph = st.columns(2)
     with weight_graph:
         fig = px.line(
@@ -154,16 +158,16 @@ def main():
         fig = px.line(bodyweight_records, x="Date", y="BMR", title="BMR Over Time")
         st.plotly_chart(fig)
 
-    st.header("Gym Exercises Tracker")
-    tab_leg, tab_back, tab_chest = st.tabs(["Leg Day", "Back Day", "Chest Day"])
+    # st.header("Gym Exercises Tracker")
+    # tab_leg, tab_back, tab_chest = st.tabs(["Leg Day", "Back Day", "Chest Day"])
 
-    days = ["Leg Day", "Back Day", "Chest Day"]
-    tabs = [tab_leg, tab_back, tab_chest]
-    for tab, day in zip(tabs, days):
-        with tab:
-            st.subheader(day)
-            exercise_records = read_data("cut.db", day)
-            exercise_tracker(exercise_records, day)
+    # days = ["Leg Day", "Back Day", "Chest Day"]
+    # tabs = [tab_leg, tab_back, tab_chest]
+    # for tab, day in zip(tabs, days):
+    #     with tab:
+    #         st.subheader(day)
+    #         exercise_records = read_data("tim.db", day)
+    #         exercise_tracker(exercise_records, day)
 
     default_food, custom_food = st.columns(2)
     with default_food:
@@ -174,7 +178,7 @@ def main():
         user_input = st.text_input("Search for a food item:", "")
 
         # Filtering the dataframe based on the user input
-        food_data = read_data("food.db", "Foods")
+        food_data = read_data("food_tim.db", "Foods")
         filtered_df = food_data[
             food_data["description"].str.contains(user_input, case=False, na=False)
         ]
@@ -206,7 +210,7 @@ def main():
                 }
             )
 
-            save_data(new_food, "food.db", "Food Tracker")
+            save_data(new_food, "food_tim.db", "Food Tracker")
 
     with custom_food:
         # Custom Food Tracker
@@ -230,39 +234,72 @@ def main():
                     }
                 )
                 # Save the new custom food data correctly by specifying the file path
-                save_data(new_custom_food, "food.db", "Foods")
+                save_data(new_custom_food, "food_tim.db", "Foods")
                 st.success(f"Custom food '{custom_food_name}' added successfully!")
 
-    data = read_data("food.db", "Food Tracker")
+    data = read_data("food_tim.db", "Food Tracker")
     st.dataframe(data.sort_values(by="Date"), use_container_width=True)
 
-    cals, protein, fat, carbs = st.columns(4)
-    with cals:
-        today = (data.loc[data["Date"] == date.strftime("%Y-%m-%d"), "Calories"].sum()).round(2)
-        yesterday = data.loc[data["Date"] == (date - pd.Timedelta(days=1)).strftime("%Y-%m-%d"), "Calories"].sum()
-        delta = (today - yesterday).round(2)
-        st.metric(label="Today's Calories", value=today, delta=delta)
-    with protein:
-        today = (data.loc[data["Date"] == date.strftime("%Y-%m-%d"), "Protein"].sum()).round(2)
-        yesterday = data.loc[data["Date"] == (date - pd.Timedelta(days=1)).strftime("%Y-%m-%d"), "Protein"].sum()
-        delta = (today - yesterday).round(2)
-        st.metric(label="Today's Protein", value=today, delta=delta)
-    with fat:
-        today = (data.loc[data["Date"] == date.strftime("%Y-%m-%d"), "Fat"].sum()).round(2)
-        yesterday = data.loc[data["Date"] == (date - pd.Timedelta(days=1)).strftime("%Y-%m-%d"), "Fat"].sum()
-        delta = (today - yesterday).round(2)
-        st.metric(label="Today's Fat", value=today, delta=delta)
-    with carbs:
-        today = (data.loc[data["Date"] == date.strftime("%Y-%m-%d"), "Carbohydrates"].sum()).round(2)
-        yesterday = data.loc[data["Date"] == (date - pd.Timedelta(days=1)).strftime("%Y-%m-%d"), "Carbohydrates"].sum()
-        delta = (today - yesterday).round(2)
-        st.metric(label="Today's Carbohydrates", value=today, delta=delta)
+    st.header("Food Tracker Management")
 
-    # Sum the calories column for each day and display a graph
-    plot_data = data.groupby("Date").sum().reset_index()
-    fig = px.line(plot_data, x="Date", y="Calories", title="Calories Over Time")
-    st.plotly_chart(fig, use_container_width=True)
+    data = read_data("food_tim.db", "Food Tracker")
+    if not data.empty:
+        st.subheader("Delete a Food Item")
+        # Create a multi-select box to choose the date and food item for deletion
+        date_options = sorted(data['Date'].unique())
+        selected_date_for_deletion = st.selectbox("Select Date", options=date_options, key="del_date")
+        
+        # Filter food items based on the selected date
+        food_items = data[data['Date'] == selected_date_for_deletion]['Food Item'].unique()
+        selected_food_item_for_deletion = st.selectbox("Select Food Item", options=food_items, key="del_food_item")
+        
+        delete_button = st.button("Delete Food Item")
+        
+        if delete_button:
+            # Convert date to string as it's stored in the database
+            selected_date_str = pd.to_datetime(selected_date_for_deletion).strftime('%Y-%m-%d')
+            
+            # Call the delete function to remove the selected food item
+            delete("food_tim.db", "Food Tracker", "Date", selected_date_str, additional_condition=f"AND `Food Item` = '{selected_food_item_for_deletion}'")
+            
+            st.success(f"Food item '{selected_food_item_for_deletion}' on {selected_date_for_deletion} deleted successfully!")
+            st.rerun()
+    else:
+        st.write("No food records to manage.")
+
+    if data.empty:
+        st.warning("No food records found.")
+    else:
+        cals, protein, fat, carbs = st.columns(4)
+        with cals:
+            today = (data.loc[data["Date"] == date.strftime("%Y-%m-%d"), "Calories"].sum()).round(2)
+            yesterday = data.loc[data["Date"] == (date - pd.Timedelta(days=1)).strftime("%Y-%m-%d"), "Calories"].sum()
+            delta = (today - yesterday).round(2)
+            st.metric(label="Today's Calories", value=today, delta=delta)
+        with protein:
+            today = (data.loc[data["Date"] == date.strftime("%Y-%m-%d"), "Protein"].sum()).round(2)
+            yesterday = data.loc[data["Date"] == (date - pd.Timedelta(days=1)).strftime("%Y-%m-%d"), "Protein"].sum()
+            delta = (today - yesterday).round(2)
+            st.metric(label="Today's Protein", value=today, delta=delta)
+        with fat:
+            today = (data.loc[data["Date"] == date.strftime("%Y-%m-%d"), "Fat"].sum()).round(2)
+            yesterday = data.loc[data["Date"] == (date - pd.Timedelta(days=1)).strftime("%Y-%m-%d"), "Fat"].sum()
+            delta = (today - yesterday).round(2)
+            st.metric(label="Today's Fat", value=today, delta=delta)
+        with carbs:
+            today = (data.loc[data["Date"] == date.strftime("%Y-%m-%d"), "Carbohydrates"].sum()).round(2)
+            yesterday = data.loc[data["Date"] == (date - pd.Timedelta(days=1)).strftime("%Y-%m-%d"), "Carbohydrates"].sum()
+            delta = (today - yesterday).round(2)
+            st.metric(label="Today's Carbohydrates", value=today, delta=delta)
+
+        # Sum the calories column for each day and display a graph
+        plot_data = data.groupby("Date").sum().reset_index()
+        fig = px.line(plot_data, x="Date", y="Calories", title="Calories Over Time")
+        st.plotly_chart(fig, use_container_width=True)
 
 
 if __name__ == "__main__":
     main()
+
+
+
