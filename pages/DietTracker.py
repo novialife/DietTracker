@@ -90,7 +90,7 @@ def exercise_tracker(exercise_records, exercise_day):
                 "Volume": [weight_lifted * reps_done * sets_done],
             }
         )
-        save_data(new_exercise, "tim.db", exercise_day)
+        save_data(new_exercise, "cut.db", exercise_day)
         st.rerun()
 
     filtered_records = exercise_records[exercise_records["Day"] == exercise_day]
@@ -113,7 +113,7 @@ def main():
 
     # Bodyweight Tracker
     st.header("Bodyweight Tracker")
-    bodyweight_records = read_data("tim.db", "Bodyweight")[["Date", "Weight", "BMR"]]
+    bodyweight_records = read_data("cut.db", "Bodyweight")[["Date", "Weight", "BMR"]]
 
     # Record weight section
     date = st.date_input("Date")
@@ -129,10 +129,10 @@ def main():
             }
         )
 
-        save_data(new_record, "tim.db", "Bodyweight")
+        save_data(new_record, "cut.db", "Bodyweight")
 
     # Display current records
-    bw = read_data("tim.db", "Bodyweight")
+    bw = read_data("cut.db", "Bodyweight")
     st.dataframe(bw, use_container_width=True)
 
     # Delete functionality
@@ -142,7 +142,7 @@ def main():
 
     if delete_button:
         # Call the delete function
-        delete("tim.db", "Bodyweight", "Date", str(delete_date))
+        delete("cut.db", "Bodyweight", "Date", str(delete_date))
         st.success(f"Record for {delete_date} deleted successfully!")
         st.rerun()
 
@@ -158,16 +158,16 @@ def main():
         fig = px.line(bodyweight_records, x="Date", y="BMR", title="BMR Over Time")
         st.plotly_chart(fig)
 
-    # st.header("Gym Exercises Tracker")
-    # tab_leg, tab_back, tab_chest = st.tabs(["Leg Day", "Back Day", "Chest Day"])
+    st.header("Gym Exercises Tracker")
+    tab_leg, tab_back, tab_chest = st.tabs(["Leg Day", "Back Day", "Chest Day"])
 
-    # days = ["Leg Day", "Back Day", "Chest Day"]
-    # tabs = [tab_leg, tab_back, tab_chest]
-    # for tab, day in zip(tabs, days):
-    #     with tab:
-    #         st.subheader(day)
-    #         exercise_records = read_data("tim.db", day)
-    #         exercise_tracker(exercise_records, day)
+    days = ["Leg Day", "Back Day", "Chest Day"]
+    tabs = [tab_leg, tab_back, tab_chest]
+    for tab, day in zip(tabs, days):
+        with tab:
+            st.subheader(day)
+            exercise_records = read_data("cut.db", day)
+            exercise_tracker(exercise_records, day)
 
     default_food, custom_food = st.columns(2)
     with default_food:
@@ -178,7 +178,7 @@ def main():
         user_input = st.text_input("Search for a food item:", "")
 
         # Filtering the dataframe based on the user input
-        food_data = read_data("food_tim.db", "Foods")
+        food_data = read_data("food.db", "Foods")
         filtered_df = food_data[
             food_data["description"].str.contains(user_input, case=False, na=False)
         ]
@@ -210,7 +210,7 @@ def main():
                 }
             )
 
-            save_data(new_food, "food_tim.db", "Food Tracker")
+            save_data(new_food, "food.db", "Food Tracker")
 
     with custom_food:
         # Custom Food Tracker
@@ -234,15 +234,15 @@ def main():
                     }
                 )
                 # Save the new custom food data correctly by specifying the file path
-                save_data(new_custom_food, "food_tim.db", "Foods")
+                save_data(new_custom_food, "food.db", "Foods")
                 st.success(f"Custom food '{custom_food_name}' added successfully!")
 
-    data = read_data("food_tim.db", "Food Tracker")
+    data = read_data("food.db", "Food Tracker")
     st.dataframe(data.sort_values(by="Date"), use_container_width=True)
 
     st.header("Food Tracker Management")
 
-    data = read_data("food_tim.db", "Food Tracker")
+    data = read_data("food.db", "Food Tracker")
     if not data.empty:
         st.subheader("Delete a Food Item")
         # Create a multi-select box to choose the date and food item for deletion
@@ -260,7 +260,7 @@ def main():
             selected_date_str = pd.to_datetime(selected_date_for_deletion).strftime('%Y-%m-%d')
             
             # Call the delete function to remove the selected food item
-            delete("food_tim.db", "Food Tracker", "Date", selected_date_str, additional_condition=f"AND `Food Item` = '{selected_food_item_for_deletion}'")
+            delete("food.db", "Food Tracker", "Date", selected_date_str, additional_condition=f"AND `Food Item` = '{selected_food_item_for_deletion}'")
             
             st.success(f"Food item '{selected_food_item_for_deletion}' on {selected_date_for_deletion} deleted successfully!")
             st.rerun()
